@@ -151,6 +151,7 @@ public class Antigen implements Callable<Integer> {
                 System.out.println("Detected Claude command: " + config.getClaudeCommand());
                 System.out.println();
 
+
                 Path generatedDir = project.resolve("src/test/java/generated");
                 if (!Files.exists(generatedDir)) {
                     System.out.println("Creating test output directory: " + generatedDir);
@@ -163,49 +164,34 @@ public class Antigen implements Callable<Integer> {
                 System.out.println("Prompt: " + prompt);
                 System.out.println();
 
-                io.antigen.runners.ProcessExecutor executor = new io.antigen.runners.ProcessExecutor();
 
+                java.util.List<String> cmdList = new java.util.ArrayList<>();
                 String claudeCmd = config.getClaudeCommand();
-                String[] commandArgs;
-                Path workingDir;
-
-                String projectPathNormalized = project.toAbsolutePath().toString().replace('\\', '/');
-                Path testFilePath = project.resolve("src/test/java/generated/DebugTest.java");
-                String testFilePathNormalized = testFilePath.toString().replace('\\', '/');
-
-                String fullPrompt = String.format(
-                    "Create a simple Java class at %s with a single JUnit test method that always passes. Use the Write tool with the absolute path.",
-                    testFilePathNormalized
-                );
 
                 if (claudeCmd.startsWith("node;")) {
                     String cliPath = claudeCmd.substring(5);
-                    Path cliDir = Path.of(cliPath).getParent();
-
-                    commandArgs = new String[]{
-                        "node", cliPath,
-                        "--print", fullPrompt,
-                        "--output-format", "text",
-                        "--allowedTools", "Write,Read",
-                        "--permission-mode", "acceptEdits",
-                        "--add-dir", projectPathNormalized
-                    };
-                    workingDir = cliDir;
+                    cmdList.add("node");
+                    cmdList.add(cliPath);
                 } else {
-                    commandArgs = new String[]{
-                        claudeCmd,
-                        "--print", fullPrompt,
-                        "--output-format", "text",
-                        "--allowedTools", "Write,Read",
-                        "--permission-mode", "acceptEdits"
-                    };
-                    workingDir = project;
+                    cmdList.add(claudeCmd);
                 }
 
+                cmdList.add("--print");
+                cmdList.add(prompt);
+                cmdList.add("--output-format");
+                cmdList.add("text");
+                cmdList.add("--allowedTools");
+                cmdList.add("Write,Read");
+                cmdList.add("--permission-mode");
+                cmdList.add("acceptEdits");
+
+                String[] commandArgs = cmdList.toArray(new String[0]);
+
+                io.antigen.runners.ProcessExecutor executor = new io.antigen.runners.ProcessExecutor();
                 io.antigen.runners.ProcessExecutor.ProcessCommand command =
                     io.antigen.runners.ProcessExecutor.ProcessCommand.builder()
                         .command(commandArgs)
-                        .workingDirectory(workingDir)
+                        .workingDirectory(project)  // Run from project directory
                         .timeout(config.getLlmTimeout())
                         .verbose(true)
                         .build();

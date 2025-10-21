@@ -13,42 +13,39 @@ public class PromptBuilder {
     public String buildPrompt(GenerationContext context) throws IOException {
         StringBuilder prompt = new StringBuilder();
 
-        // Read API spec content
         String specContent = Files.readString(context.getSpecPath());
 
-        // Build normalized paths for Claude (forward slashes work cross-platform)
         String projectPathNormalized = normalizePath(context.getProjectPath());
         String testOutputPath = normalizePath(context.getProjectPath().resolve("src/test/java/generated"));
 
-        // Base instruction
-        prompt.append(String.format("""
-            Generate comprehensive JUnit 5 tests for the API specification below.
-
-            PROJECT PATH: %s
+//        - Test all endpoints and HTTP methods
+//        - Include happy path (2xx) and error cases (4xx, 5xx)
+//        - Validate response schemas and required fields
+//        - Test edge cases: null values, empty arrays, boundary conditions, missing fields
+//        - Use descriptive test method names that explain what is being tested
+//        - Add @Test annotation to each test method
+//        - Organize tests by endpoint/resource in separate test classes
+        prompt.append("""
+            Generate JUnit 5 tests for the API specification below.
 
             REQUIREMENTS:
-            - Write all tests in %s directory
-            - Use ABSOLUTE paths when writing files
+            - create ONLY for GET Payment and GET User, for each endpoint, one file with 2 tests
+            - these are wiremock mocked APIs not real API - do not change mappings
+            - DO NOT CREATE OR CHANGE ANY OTHER FILES in the project
+            - Write all tests in src/test/java/generated/ directory
             - Use RestAssured for HTTP calls
             - Use AssertJ for assertions
-            - Test all endpoints and HTTP methods
-            - Include happy path (2xx) and error cases (4xx, 5xx)
-            - Validate response schemas and required fields
-            - Test edge cases: null values, empty arrays, boundary conditions
-            - Use descriptive test method names that explain what is being tested
-            - Add @Test annotation to each test method
-            - Organize tests by endpoint/resource in separate test classes
+            
 
             IMPORTANT:
             - Generate ONLY valid Java code
             - Do NOT include markdown formatting or code blocks
             - Each test class should be in its own file
             - Include proper imports (JUnit, RestAssured, AssertJ)
-            - Set base URI if needed (you can use RestAssured.baseURI)
+            - Set base URI using RestAssured.baseURI (check the API spec for the server URL)
 
-            """, projectPathNormalized, testOutputPath));
+            """);
 
-        // Add custom requirements if present
         if (!context.getRequirements().isEmpty()) {
             prompt.append("ADDITIONAL REQUIREMENTS:\n");
             for (String req : context.getRequirements()) {
@@ -57,13 +54,11 @@ public class PromptBuilder {
             prompt.append("\n");
         }
 
-        // Add API specification
         prompt.append("API SPECIFICATION:\n");
         prompt.append("```yaml\n");
         prompt.append(specContent);
         prompt.append("\n```\n\n");
 
-        // Add feedback from previous failures if present
         if (context.hasFeedback()) {
             prompt.append("PREVIOUS ATTEMPT FAILED:\n");
             prompt.append(context.getLatestFeedback().getFeedback());

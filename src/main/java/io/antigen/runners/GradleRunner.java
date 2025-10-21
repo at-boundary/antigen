@@ -126,30 +126,84 @@ public class GradleRunner {
 
             if (report.getEscapedFaults().isEmpty()) {
                 log.info("MetaTest passed - all faults caught");
-                return MetaTestPhase.success(report.getFaultDetectionRate());
+                return MetaTestPhase.success(
+                    report.getFaultDetectionRate(),
+                    report.getTotalFaults(),
+                    report.getCaughtFaults()
+                );
             }
 
             log.warn("MetaTest failed - {} faults escaped", report.getEscapedFaults().size());
-            return MetaTestPhase.failed(report.getEscapedFaults(), report.getFaultDetectionRate());
+            return MetaTestPhase.failed(
+                report.getEscapedFaults(),
+                report.getFaultDetectionRate(),
+                report.getTotalFaults(),
+                report.getCaughtFaults()
+            );
 
         } catch (IOException e) {
             log.error("Failed to parse MetaTest report", e);
             return MetaTestPhase.failed(
                     List.of(new EscapedFault("unknown", "unknown", "unknown", "unknown")),
-                    0.0
+                    0.0,
+                    1,
+                    0
             );
         }
     }
 
     private MetaTestReport parseMetaTestReport(Path projectPath) throws IOException {
-        Path reportPath = projectPath.resolve("build/reports/metatest/report.json");
+        Path reportPath = projectPath.resolve("fault_simulation_report.json");
 
         if (!Files.exists(reportPath)) {
             throw new IOException("MetaTest report not found at: " + reportPath);
         }
 
         ObjectMapper mapper = new ObjectMapper();
-        return mapper.readValue(reportPath.toFile(), MetaTestReport.class);
+        java.util.Map<String, java.util.Map<String, java.util.Map<String, java.util.List<FaultTestResult>>>> rawReport =
+                mapper.readValue(reportPath.toFile(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
+
+        java.util.List<EscapedFault> escapedFaults = new java.util.ArrayList<>();
+        int totalFaults = 0;
+        int caughtFaults = 0;
+
+        for (java.util.Map.Entry<String, java.util.Map<String, java.util.Map<String, java.util.List<FaultTestResult>>>> endpointEntry : rawReport.entrySet()) {
+            String endpoint = endpointEntry.getKey();
+
+            for (java.util.Map.Entry<String, java.util.Map<String, java.util.List<FaultTestResult>>> fieldEntry : endpointEntry.getValue().entrySet()) {
+                String field = fieldEntry.getKey();
+
+                for (java.util.Map.Entry<String, java.util.List<FaultTestResult>> faultTypeEntry : fieldEntry.getValue().entrySet()) {
+                    String faultType = faultTypeEntry.getKey();
+
+                    for (FaultTestResult testResult : faultTypeEntry.getValue()) {
+                        totalFaults++;
+
+                        if (testResult.isCaught()) {
+                            caughtFaults++;
+                        } else {
+                            // Escaped fault - add to list
+                            escapedFaults.add(new EscapedFault(
+                                    endpoint,
+                                    field,
+                                    faultType,
+                                    testResult.getTest()
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        double faultDetectionRate = totalFaults > 0 ? (double) caughtFaults / totalFaults : 0.0;
+
+        MetaTestReport report = new MetaTestReport();
+        report.setTotalFaults(totalFaults);
+        report.setCaughtFaults(caughtFaults);
+        report.setEscapedFaults(escapedFaults);
+        report.setFaultDetectionRate(faultDetectionRate);
+
+        return report;
     }
 
     private String getGradleCommand(Path projectPath) {
@@ -166,8 +220,19 @@ public class GradleRunner {
     }
 
     /**
-     * DTO for parsing MetaTest JSON report
-     * This structure should match what MetaTest outputs
+     * DTO for parsing individual test results from MetaTest JSON report
+     */
+    @Data
+    public static class FaultTestResult {
+        private String test;      // Test method name
+        private boolean caught;   // Whether the test caught the fault
+        private String error;     // Error message if caught
+
+        public FaultTestResult() {}
+    }
+
+    /**
+     * DTO for MetaTest report summary
      */
     @Data
     public static class MetaTestReport {
@@ -181,6 +246,5 @@ public class GradleRunner {
         public List<EscapedFault> getEscapedFaults() {
             return escapedFaults != null ? escapedFaults : List.of();
         }
-
     }
 }

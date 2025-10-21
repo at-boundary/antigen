@@ -10,13 +10,15 @@ public class MetaTestPhase implements PhaseResult {
     boolean success;
     List<EscapedFault> escapedFaults;
     double faultDetectionRate;
+    int totalFaults;
+    int caughtFaults;
 
-    public static MetaTestPhase success(double detectionRate) {
-        return new MetaTestPhase(true, List.of(), detectionRate);
+    public static MetaTestPhase success(double detectionRate, int total, int caught) {
+        return new MetaTestPhase(true, List.of(), detectionRate, total, caught);
     }
 
-    public static MetaTestPhase failed(List<EscapedFault> escaped, double detectionRate) {
-        return new MetaTestPhase(false, escaped, detectionRate);
+    public static MetaTestPhase failed(List<EscapedFault> escaped, double detectionRate, int total, int caught) {
+        return new MetaTestPhase(false, escaped, detectionRate, total, caught);
     }
 
     public boolean hasEscapedFaults() {
@@ -26,19 +28,28 @@ public class MetaTestPhase implements PhaseResult {
     @Override
     public String getFeedback() {
         if (success) {
-            return String.format("MetaTest passed - %.1f%% fault detection rate", faultDetectionRate * 100);
+            return String.format("MetaTest passed - %.1f%% fault detection rate (%d/%d faults caught)",
+                faultDetectionRate * 100, caughtFaults, totalFaults);
         }
 
-        StringBuilder feedback = new StringBuilder();
-        feedback.append("METATEST FAILURES - Tests did NOT catch these faults:\n\n");
+        return String.format("""
+            METATEST FAILURE - Your tests did NOT catch some simulated faults.
 
-        for (EscapedFault fault : escapedFaults) {
-            feedback.append(fault.toDetailedString()).append("\n---\n\n");
-        }
+            Read the detailed fault report at: fault_simulation_report.json in project root
 
-        feedback.append(String.format("\nOverall fault detection rate: %.1f%%\n", faultDetectionRate * 100));
-        feedback.append("Please add assertions to detect these fault scenarios.\n");
+            This file contains a structured report showing:
+            - Which endpoints were tested
+            - Which fields had faults injected (missing_field, null_field)
+            - Which tests ran against each fault
+            - Whether each test caught the fault (caught: true/false)
+            
+            All simulated faults should have caught: true values
 
-        return feedback.toString();
+            Analyze this report and update your test assertions to catch the faults where "caught": false.
+            Focus on adding proper null checks, field presence validation, and value type assertions.
+            """,
+            escapedFaults.size(),
+            totalFaults,
+            faultDetectionRate * 100);
     }
 }

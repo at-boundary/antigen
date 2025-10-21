@@ -41,60 +41,37 @@ public class ClaudeGenerator {
 
             log.debug("Prompt length: {} characters", prompt.length());
 
+            java.util.List<String> cmdList = new java.util.ArrayList<>();
+
             String claudeCmd = config.getClaudeCommand();
-            String[] commandArgs;
-            Path workingDir;
-
             if (claudeCmd.startsWith("node;")) {
-                String cliPath = claudeCmd.substring(5); // Remove "node;" prefix
-                Path cliDir = Path.of(cliPath).getParent(); // Directory containing cli.js
-
-                java.util.List<String> cmdList = new java.util.ArrayList<>();
+                String cliPath = claudeCmd.substring(5);
                 cmdList.add("node");
                 cmdList.add(cliPath);
-                cmdList.add("--print");
-                cmdList.add(prompt);
-                cmdList.add("--output-format");
-                cmdList.add("text");
-                cmdList.add("--allowedTools");
-                cmdList.add(config.getAllowedTools());
-
-                if (config.isUseDangerousSkip()) {
-                    cmdList.add("--dangerously-skip-permissions");
-                } else {
-                    cmdList.add("--permission-mode");
-                    cmdList.add(config.getPermissionMode());
-                }
-
-                cmdList.add("--add-dir");
-                cmdList.add(context.getProjectPath().toString().replace('\\', '/'));
-
-                commandArgs = cmdList.toArray(new String[0]);
-                workingDir = cliDir; // Run from claude-code directory
             } else {
-                java.util.List<String> cmdList = new java.util.ArrayList<>();
                 cmdList.add(claudeCmd);
-                cmdList.add("--print");
-                cmdList.add(prompt);
-                cmdList.add("--output-format");
-                cmdList.add("text");
-                cmdList.add("--allowedTools");
-                cmdList.add(config.getAllowedTools());
-
-                if (config.isUseDangerousSkip()) {
-                    cmdList.add("--dangerously-skip-permissions");
-                } else {
-                    cmdList.add("--permission-mode");
-                    cmdList.add(config.getPermissionMode());
-                }
-
-                commandArgs = cmdList.toArray(new String[0]);
-                workingDir = context.getProjectPath();
             }
+
+            cmdList.add("--print");
+            cmdList.add(prompt);
+            cmdList.add("--output-format");
+            cmdList.add("text");
+            cmdList.add("--allowedTools");
+            cmdList.add(config.getAllowedTools());
+
+            // Add permission handling
+            if (config.isUseDangerousSkip()) {
+                cmdList.add("--dangerously-skip-permissions");
+            } else {
+                cmdList.add("--permission-mode");
+                cmdList.add(config.getPermissionMode());
+            }
+
+            String[] commandArgs = cmdList.toArray(new String[0]);
 
             ProcessExecutor.ProcessCommand command = ProcessExecutor.ProcessCommand.builder()
                     .command(commandArgs)
-                    .workingDirectory(workingDir)
+                    .workingDirectory(context.getProjectPath())
                     .timeout(config.getLlmTimeout())
                     .verbose(config.isVerbose())
                     .build();
