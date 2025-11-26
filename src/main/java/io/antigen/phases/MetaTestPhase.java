@@ -33,20 +33,33 @@ public class MetaTestPhase implements PhaseResult {
         }
 
         return String.format("""
-            METATEST FAILURE - Your tests did NOT catch some simulated faults.
+            METATEST FAILURE - Your tests did NOT catch %d out of %d injected faults (%.1f%% detection rate).
 
-            Read the detailed fault report at: fault_simulation_report.json in project root
+            IMPORTANT: Use the Read tool to read fault_simulation_report.json in the project root.
+            DO NOT write scripts to parse it - read it directly with the Read tool.
 
-            This file contains a structured report showing:
-            - Which endpoints were tested
-            - Which fields had faults injected (missing_field, null_field)
-            - Which tests ran against each fault
-            - Whether each test caught the fault (caught: true/false)
-            
-            All simulated faults should have caught: true values
+            The report structure:
+            {
+              "/api/endpoint": {
+                "fieldName": {
+                  "fault_type": {
+                    "caught_by_any_test": true/false,  <- KEY FIELD: false means this fault escaped
+                    "details": [
+                      { "test": "testName", "caught": true/false, "error": "..." }
+                    ]
+                  }
+                }
+              }
+            }
 
-            Analyze this report and update your test assertions to catch the faults where "caught": false.
-            Focus on adding proper null checks, field presence validation, and value type assertions.
+            Your task:
+            1. Read E:\\Projects\\METATEST\\ANTIGEN\\antigen-example\\fault_simulation_report.json
+            2. Find all entries where "caught_by_any_test": false
+            3. Look at the "details" array to see which tests failed to catch it
+            4. Update those tests to add proper assertions to catch that particular fault
+
+            Focus on the faults where "caught_by_any_test": false - these are the ones that escaped detection.
+            "caught_by_any_test" is set to true when at least one test catches that fault 
             """,
             escapedFaults.size(),
             totalFaults,

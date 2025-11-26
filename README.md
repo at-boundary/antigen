@@ -88,19 +88,32 @@ MetaTest generates `fault_simulation_report.json` in the project root:
 {
   "/api/v1/endpoint": {
     "fieldName": {
-      "fault_type": [
-        {
-          "test": "testMethodName",
-          "caught": true/false,
-          "error": "error message if caught"
-        }
-      ]
+      "fault_type": {
+        "caught_by_any_test": true,
+        "details": [
+          {
+            "test": "testMethodName",
+            "caught": true,
+            "error": "error message if caught"
+          }
+        ]
+      }
     }
   }
 }
 ```
 
-**Key insight**: Antigen doesn't parse and format every fault. Instead, it tells Claude to read the JSON file directly, allowing Claude to analyze patterns and understand which assertions are missing.
+**Key fields:**
+- `caught_by_any_test`: Aggregated boolean - `false` means this fault escaped detection by all tests
+- `details`: Individual test results showing which tests ran and whether each caught the fault
+
+**Key insight**: Antigen doesn't parse and format every fault. Instead, it tells Claude to:
+1. Read the JSON file directly using the Read tool
+2. Find entries where `"caught_by_any_test": false`
+3. Analyze the `details` array to see which tests failed
+4. Update tests to add missing assertions
+
+This allows Claude to recognize patterns and understand the context better than pre-formatted feedback.
 
 ## Setup and Installation
 
@@ -292,22 +305,44 @@ When tests fail to catch faults, Antigen provides:
 ```
 METATEST FAILURE - Your tests did NOT catch 23 out of 42 injected faults (45.2% detection rate).
 
-Read the detailed fault report at: fault_simulation_report.json
+IMPORTANT: Use the Read tool to read fault_simulation_report.json in the project root.
+DO NOT write scripts to parse it - read it directly with the Read tool.
 
-This file contains a structured report showing:
-- Which endpoints were tested
-- Which fields had faults injected (missing_field, null_field, invalid_value, empty_list, empty_string)
-- Which tests ran against each fault
-- Whether each test caught the fault (caught: true/false)
+The report structure:
+{
+  "/api/endpoint": {
+    "fieldName": {
+      "fault_type": {
+        "caught_by_any_test": true/false,  <- KEY FIELD: false means this fault escaped
+        "details": [
+          { "test": "testName", "caught": true/false, "error": "..." }
+        ]
+      }
+    }
+  }
+}
 
-Analyze this report and update your test assertions to catch the faults where "caught": false.
-Focus on adding proper null checks, field presence validation, and value type assertions.
+Your task:
+1. Read fault_simulation_report.json using the Read tool
+2. Find all entries where "caught_by_any_test": false
+3. Look at the "details" array to see which tests failed to catch it
+4. Update those tests to add proper assertions for:
+   - Field presence validation (for missing_field faults)
+   - Null value checks (for null_field faults)
+   - Type validation (for invalid_value faults)
+   - Empty collection checks (for empty_list faults)
+   - Empty string validation (for empty_string faults)
+
+Focus on the faults where "caught_by_any_test": false - these are the ones that escaped detection.
 ```
 
-Claude then reads the JSON file and identifies patterns:
-- "All tests miss null checks on optional fields"
-- "No validation for required field presence"
-- "Type assertions are missing"
+Claude then:
+1. Uses the Read tool to access `fault_simulation_report.json`
+2. Searches for `"caught_by_any_test": false` entries
+3. Identifies patterns like:
+   - "All tests for the `userId` field's `null_field` fault have `caught: false`"
+   - "Tests missing `.body("userId", notNullValue())` assertions"
+4. Updates the specific tests to add missing validations
 
 ### 3. Success Criteria
 

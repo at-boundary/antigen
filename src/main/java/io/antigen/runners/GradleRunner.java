@@ -160,36 +160,43 @@ public class GradleRunner {
         }
 
         ObjectMapper mapper = new ObjectMapper();
-        java.util.Map<String, java.util.Map<String, java.util.Map<String, java.util.List<FaultTestResult>>>> rawReport =
+        // Parse structure: { "/endpoint": { "field": { "faultType": {caught_by_any_test, details[]} } } }
+        java.util.Map<String, java.util.Map<String, java.util.Map<String, FaultTypeResult>>> rawReport =
                 mapper.readValue(reportPath.toFile(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
 
         java.util.List<EscapedFault> escapedFaults = new java.util.ArrayList<>();
         int totalFaults = 0;
         int caughtFaults = 0;
 
-        for (java.util.Map.Entry<String, java.util.Map<String, java.util.Map<String, java.util.List<FaultTestResult>>>> endpointEntry : rawReport.entrySet()) {
+        for (java.util.Map.Entry<String, java.util.Map<String, java.util.Map<String, FaultTypeResult>>> endpointEntry : rawReport.entrySet()) {
             String endpoint = endpointEntry.getKey();
 
-            for (java.util.Map.Entry<String, java.util.Map<String, java.util.List<FaultTestResult>>> fieldEntry : endpointEntry.getValue().entrySet()) {
+            for (java.util.Map.Entry<String, java.util.Map<String, FaultTypeResult>> fieldEntry : endpointEntry.getValue().entrySet()) {
                 String field = fieldEntry.getKey();
 
-                for (java.util.Map.Entry<String, java.util.List<FaultTestResult>> faultTypeEntry : fieldEntry.getValue().entrySet()) {
+                for (java.util.Map.Entry<String, FaultTypeResult> faultTypeEntry : fieldEntry.getValue().entrySet()) {
                     String faultType = faultTypeEntry.getKey();
+                    FaultTypeResult faultResult = faultTypeEntry.getValue();
 
-                    for (FaultTestResult testResult : faultTypeEntry.getValue()) {
-                        totalFaults++;
+                    totalFaults++;
 
-                        if (testResult.isCaught()) {
-                            caughtFaults++;
-                        } else {
-                            // Escaped fault - add to list
-                            escapedFaults.add(new EscapedFault(
-                                    endpoint,
-                                    field,
-                                    faultType,
-                                    testResult.getTest()
-                            ));
-                        }
+                    if (faultResult.isCaughtByAnyTest()) {
+                        caughtFaults++;
+                    } else {
+                        // Escaped fault - find which tests failed to catch it
+                        java.util.List<String> failedTests = faultResult.getDetails().stream()
+                                .filter(detail -> !detail.isCaught())
+                                .map(FaultTestResult::getTest)
+                                .toList();
+
+                        String testsInfo = failedTests.isEmpty() ? "all tests" : String.join(", ", failedTests);
+
+                        escapedFaults.add(new EscapedFault(
+                                endpoint,
+                                field,
+                                faultType,
+                                testsInfo
+                        ));
                     }
                 }
             }
@@ -217,6 +224,23 @@ public class GradleRunner {
         }
 
         return "gradle";
+    }
+
+    /**
+     * DTO for parsing fault type results from MetaTest JSON report
+     * Structure: { "caught_by_any_test": true/false, "details": [...] }
+     */
+    @Data
+    public static class FaultTypeResult {
+        @com.fasterxml.jackson.annotation.JsonProperty("caught_by_any_test")
+        private boolean caughtByAnyTest;  // True if at least one test caught this fault
+        private java.util.List<FaultTestResult> details;  // Individual test results
+
+        public FaultTypeResult() {}
+
+        public java.util.List<FaultTestResult> getDetails() {
+            return details != null ? details : java.util.List.of();
+        }
     }
 
     /**

@@ -24,14 +24,16 @@ public class TestPhase implements PhaseResult {
             return "All tests passed";
         }
 
-        StringBuilder feedback = new StringBuilder("TEST FAILURES:\n\n");
-        for (TestFailure failure : testFailures) {
-            feedback.append("Test: ").append(failure.getClassName())
-                    .append(".").append(failure.getMethodName()).append("()\n");
-            feedback.append("Error: ").append(failure.getErrorMessage()).append("\n");
-            feedback.append("Stack trace:\n").append(failure.getStackTrace()).append("\n");
-            feedback.append("---\n\n");
-        }
+        StringBuilder feedback = new StringBuilder();
+        feedback.append(String.format("TEST FAILURES - %d test(s) failed.\n\n", testFailures.size()));
+        feedback.append("IMPORTANT: Read the detailed test reports for full error messages.\n");
+        feedback.append("Test reports location: build/test-results/test/\n");
+        feedback.append("Use the Read tool to read the XML files (TEST-*.xml) for failed tests.\n\n");
+        feedback.append("Test the API requests with curl before running the tests to prevent failures - skip if can't make that request return 200");
+
+        feedback.append("\nDo NOT write scripts to parse these files - use the Read tool directly.\n");
+        feedback.append("The XML files contain <failure> elements with detailed assertion messages and stack traces.\n");
+
         return feedback.toString();
     }
 }
