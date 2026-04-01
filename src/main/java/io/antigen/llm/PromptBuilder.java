@@ -10,64 +10,66 @@ import java.nio.file.Path;
 @Slf4j
 public class PromptBuilder {
 
-    public String buildPrompt(GenerationContext context) throws IOException {
-        StringBuilder prompt = new StringBuilder();
+    private static final String DEFAULT_TEMPLATE = """
+        Generate comprehensive JUnit 5 tests for the API specification.
 
-        // Get relative path to spec from project directory
+        API SPECIFICATION FILE: {SPEC_PATH}
+        IMPORTANT: Read this file using the Read tool. Do NOT assume its contents. Do NOT create scripts to read files.
+
+        REQUIREMENTS:
+        - Write all tests in src/test/java/generated/ directory
+        - Use RestAssured for HTTP calls
+        - Use AssertJ for assertions
+        - Test all endpoints and HTTP methods
+        - Include happy path (2xx)
+        - Do not test bad request tests that generate 4xx, 5xx status codes
+        - Validate response schemas and required fields
+        - Check against null values, empty arrays, boundary conditions, missing fields
+        - Use descriptive test method names
+        - Add @Test annotation to each test method
+        - Organize tests by endpoint/resource in separate test classes
+
+        IMPORTANT:
+        - Generate ONLY valid Java code
+        - Do NOT include markdown formatting or code blocks
+        - Each test class should be in its own file
+        - Include proper imports (JUnit, RestAssured, AssertJ)
+        - Set base URI using RestAssured.baseURI
+        {ADDITIONAL_REQUIREMENTS}
+        {FEEDBACK}
+        """;
+
+    public String buildPrompt(GenerationContext context) throws IOException {
+        String template = loadTemplate(context);
+
         Path relativePath = context.getProjectPath().relativize(context.getSpecPath());
         String specPathRelative = relativePath.toString().replace('\\', '/');
 
-        prompt.append(String.format("""
-            Generate comprehensive JUnit 5 tests for the API specification.
-
-            API SPECIFICATION FILE: %s
-            Add tests ONLY FOR http://localhost:8000/api/v1/auth/login and http://localhost:8000/api/v1/orders endpoints, not all endpoints!
-            
-            IMPORTANT: Read this file using the Read tool. Do NOT assume its contents. Do NOT create scripts to read files
-
-            REQUIREMENTS:
-            - Write all tests in src/test/java/generated/ directory
-            - Test the API requests with curl before running the tests to prevent failures - skip if can't make that request return 200
-            - Register a user only once, and reuse it in all tests to authenticate.
-            - Each test should call only one endpoint related to that test
-            - Do not create, under no circumstances, any other files except test files in src/test/java/generated/
-            - Use RestAssured for HTTP calls
-            - Use AssertJ for assertions
-            - Include happy path (2xx), Do not write bad request tests that generate 4xx, 5xx status codes
-            - Use descriptive test method names that explain what is being tested
-            - Add @Test annotation to each test method
-            - Organize tests by endpoint/resource in separate test classes
-
-            IMPORTANT:
-            - Generate ONLY valid Java code
-            - Do NOT include markdown formatting or code blocks
-            - Each test class should be in its own file
-            - Include proper imports (JUnit, RestAssured, AssertJ)
-            - Set base URI using RestAssured.baseURI (check the API spec for the server URL)
-
-            """, specPathRelative));
+        String prompt = template.replace("{SPEC_PATH}", specPathRelative);
 
         if (!context.getRequirements().isEmpty()) {
-            prompt.append("ADDITIONAL REQUIREMENTS:\n");
+            StringBuilder reqBuilder = new StringBuilder("\nADDITIONAL REQUIREMENTS:\n");
             for (String req : context.getRequirements()) {
-                prompt.append("- ").append(req).append("\n");
+                reqBuilder.append("- ").append(req).append("\n");
             }
-            prompt.append("\n");
+            prompt = prompt.replace("{ADDITIONAL_REQUIREMENTS}", reqBuilder.toString());
+        } else {
+            prompt = prompt.replace("{ADDITIONAL_REQUIREMENTS}", "");
         }
 
         if (context.hasFeedback()) {
-            prompt.append("PREVIOUS ATTEMPT FAILED:\n");
-            prompt.append(context.getLatestFeedback().getFeedback());
-            prompt.append("\n\nPlease fix these issues and regenerate the tests.\n");
+            String feedback = "\nPREVIOUS ATTEMPT FAILED:\n" +
+                    context.getLatestFeedback().getFeedback() +
+                    "\n\nPlease fix these issues and regenerate the tests.\n";
+            prompt = prompt.replace("{FEEDBACK}", feedback);
+        } else {
+            prompt = prompt.replace("{FEEDBACK}", "");
         }
 
         log.debug("Built prompt with {} characters", prompt.length());
-        return prompt.toString();
+        return prompt;
     }
 
-    /**
-     * Create a simplified prompt for retry attempts
-     */
     public String buildRetryPrompt(GenerationContext context) {
         if (!context.hasFeedback()) {
             throw new IllegalStateException("Cannot build retry prompt without feedback");
@@ -82,11 +84,12 @@ public class PromptBuilder {
         return prompt.toString();
     }
 
-    /**
-     * Normalize path to use forward slashes (works cross-platform with Claude CLI)
-     * Example: E:\Projects\test -> E:/Projects/test
-     */
-    private String normalizePath(Path path) {
-        return path.toAbsolutePath().toString().replace('\\', '/');
+    private String loadTemplate(GenerationContext context) throws IOException {
+        if (context.getPromptTemplatePath() != null) {
+            log.info("Loading custom prompt template from: {}", context.getPromptTemplatePath());
+            return Files.readString(context.getPromptTemplatePath());
+        }
+        log.debug("Using default prompt template");
+        return DEFAULT_TEMPLATE;
     }
 }

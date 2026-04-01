@@ -1,6 +1,6 @@
 plugins {
     java
-    application
+    `java-gradle-plugin`
 }
 
 group = "io.antigen"
@@ -24,7 +24,7 @@ dependencies {
     implementation("info.picocli:picocli:4.7.5")
     annotationProcessor("info.picocli:picocli-codegen:4.7.5")
 
-    // JSON parsing
+    // JSON/YAML parsing
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.18.2")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.18.2")
@@ -39,20 +39,17 @@ dependencies {
     testImplementation("org.assertj:assertj-core:3.24.2")
 }
 
-application {
-    mainClass.set("io.antigen.Antigen")
+gradlePlugin {
+    plugins {
+        create("antigenPlugin") {
+            id = "io.antigen"
+            implementationClass = "io.antigen.plugin.AntigenPlugin"
+            displayName = "Antigen Test Generation Plugin"
+            description = "Generate AI-powered tests from API specifications with MetaTest validation"
+        }
+    }
 }
 
 tasks.test {
     useJUnitPlatform()
-}
-
-tasks.jar {
-    manifest {
-        attributes["Main-Class"] = "io.antigen.Antigen"
-    }
-
-    // Create fat jar with dependencies
-    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

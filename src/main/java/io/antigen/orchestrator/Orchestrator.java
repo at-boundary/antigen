@@ -26,10 +26,17 @@ public class Orchestrator {
     }
 
     public GenerationResult generate(Path specPath, Path projectPath, List<String> requirements) {
+        return generate(specPath, projectPath, requirements, null);
+    }
+
+    public GenerationResult generate(Path specPath, Path projectPath, List<String> requirements, Path promptTemplatePath) {
         log.info("=== Starting Antigen Test Generation ===");
         log.info("API Spec: {}", specPath);
         log.info("Project: {}", projectPath);
         log.info("Max Retries: {}", config.getMaxRetries());
+        if (promptTemplatePath != null) {
+            log.info("Custom Prompt Template: {}", promptTemplatePath);
+        }
 
         if (!claudeGenerator.isClaudeAvailable()) {
             log.error("Claude CLI is not available. Please install Claude Code and ensure 'claude' command is in PATH.");
@@ -39,6 +46,7 @@ public class Orchestrator {
         GenerationContext context = GenerationContext.builder()
                 .specPath(specPath)
                 .projectPath(projectPath)
+                .promptTemplatePath(promptTemplatePath)
                 .requirements(requirements)
                 .build();
 

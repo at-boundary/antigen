@@ -13,6 +13,7 @@ import java.util.List;
 public class GenerationContext {
     Path specPath;
     Path projectPath;
+    Path promptTemplatePath;
     @Singular
     List<String> requirements;
     @Singular("feedback")
