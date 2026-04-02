@@ -115,6 +115,89 @@ MetaTest generates `fault_simulation_report.json` in the project root:
 
 This allows Claude to recognize patterns and understand the context better than pre-formatted feedback.
 
+## Gradle Plugin
+
+Antigen is distributed as a Gradle plugin. Add it to your project via JitPack:
+
+**`settings.gradle.kts`**
+```kotlin
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        maven { url = uri("https://jitpack.io") }
+    }
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "io.antigen") {
+                useModule("com.github.at-boundary:antigen:v0.2")
+            }
+        }
+    }
+}
+```
+
+**`build.gradle.kts`**
+```kotlin
+plugins {
+    id("io.antigen") version "v0.2"
+}
+```
+
+Then create `antigen.yml` in your project root and run:
+```bash
+./gradlew generateAITests
+```
+
+See [antigen-example](https://github.com/at-boundary/antigen-example) for a complete working example.
+
+---
+
+## Local Development
+
+### Build
+
+```bash
+./gradlew build
+```
+
+### Publish to mavenLocal
+
+Publishes the plugin to your local Maven repository (`~/.m2`), making it available to other local projects without going through JitPack.
+
+```bash
+./gradlew publishToMavenLocal
+```
+
+### Use in antigen-example (two options)
+
+**Option A — Composite build (recommended, no publish step)**
+
+In `antigen-example/settings.gradle.kts`, add `includeBuild` inside `pluginManagement`:
+```kotlin
+pluginManagement {
+    includeBuild("../antigen")   // resolves plugin from local source directly
+    repositories { ... }
+}
+```
+Changes to antigen are reflected immediately. No `publishToMavenLocal` needed.
+
+**Option B — mavenLocal**
+
+After running `./gradlew publishToMavenLocal`, ensure `mavenLocal()` is listed first in both `pluginManagement.repositories` and `dependencyResolutionManagement.repositories` in `antigen-example/settings.gradle.kts`. Comment out `includeBuild` if present.
+
+```kotlin
+pluginManagement {
+    // includeBuild("../antigen")   // commented out
+    repositories {
+        mavenLocal()               // picks up publishToMavenLocal artifact
+        gradlePluginPortal()
+        maven { url = uri("https://jitpack.io") }
+    }
+}
+```
+
+---
+
 ## Setup and Installation
 
 ### Prerequisites
@@ -479,13 +562,20 @@ Use with:
 antigen/
 ├── src/main/java/io/antigen/
 │   ├── Antigen.java                 # CLI entry point (PicoCLI)
+│   ├── plugin/
+│   │   ├── AntigenPlugin.java       # Gradle plugin (registers generateAITests task)
+│   │   └── GenerateAITestsTask.java # Task: reads antigen.yml, runs orchestrator
+│   ├── config/
+│   │   ├── YamlConfig.java          # antigen.yml model
+│   │   ├── YamlConfigLoader.java    # Loads antigen.yml
+│   │   └── ConfigConverter.java     # YamlConfig → AntigenConfig
 │   ├── orchestrator/
 │   │   ├── Orchestrator.java        # State machine coordinator
 │   │   ├── GenerationContext.java   # Immutable context/state
-│   │   └── AntigenConfig.java       # Configuration
+│   │   └── AntigenConfig.java       # Runtime configuration
 │   ├── llm/
 │   │   ├── ClaudeGenerator.java     # Claude CLI integration
-│   │   └── PromptBuilder.java       # Prompt construction
+│   │   └── PromptBuilder.java       # Prompt construction (supports custom templates)
 │   ├── runners/
 │   │   ├── GradleRunner.java        # Gradle command execution
 │   │   └── ProcessExecutor.java     # Process management
