@@ -41,25 +41,37 @@ public class MetaTestPhase implements PhaseResult {
             The report structure:
             {
               "/api/endpoint": {
-                "fieldName": {
+                "contractFaultCount": 5,
+                "invariantFaultCount": 2,
+                "contractFaultsCaught": 3,
+                "invariantFaultsCaught": 1,
+                "contract_faults": {
                   "fault_type": {
-                    "caught_by_any_test": true/false,  <- KEY FIELD: false means this fault escaped
-                    "details": [
-                      { "test": "testName", "caught": true/false, "error": "..." }
-                    ]
+                    "field_name": {
+                      "caught_by_any_test": false,  <- KEY FIELD: false means this fault escaped
+                      "tested_by": ["testMethod"],
+                      "caught_by": []
+                    }
+                  }
+                },
+                "invariant_faults": {
+                  "invariant_name": {
+                    "caught_by_any_test": false,  <- KEY FIELD: false means this fault escaped
+                    "tested_by": ["testMethod"],
+                    "caught_by": []
                   }
                 }
               }
             }
 
             Your task:
-            1. Read E:\\Projects\\METATEST\\ANTIGEN\\antigen-example\\fault_simulation_report.json
-            2. Find all entries where "caught_by_any_test": false
-            3. Look at the "details" array to see which tests failed to catch it
+            1. Read fault_simulation_report.json from the project root
+            2. Find all entries where "caught_by_any_test": false (in both contract_faults and invariant_faults)
+            3. Look at the "tested_by" array to see which tests ran against this fault
             4. Update those tests to add proper assertions to catch that particular fault
 
             Focus on the faults where "caught_by_any_test": false - these are the ones that escaped detection.
-            "caught_by_any_test" is set to true when at least one test catches that fault 
+            "caught_by_any_test" is set to true when at least one test catches that fault
             """,
             escapedFaults.size(),
             totalFaults,

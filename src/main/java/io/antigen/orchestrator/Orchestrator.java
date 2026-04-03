@@ -7,12 +7,9 @@ import io.antigen.phases.GenerationPhase;
 import io.antigen.phases.MetaTestPhase;
 import io.antigen.phases.TestPhase;
 import io.antigen.runners.GradleRunner;
-import lombok.extern.slf4j.Slf4j;
-
 import java.nio.file.Path;
 import java.util.List;
 
-@Slf4j
 public class Orchestrator {
 
     private final ClaudeGenerator claudeGenerator;
@@ -30,16 +27,12 @@ public class Orchestrator {
     }
 
     public GenerationResult generate(Path specPath, Path projectPath, List<String> requirements, Path promptTemplatePath) {
-        log.info("=== Starting Antigen Test Generation ===");
-        log.info("API Spec: {}", specPath);
-        log.info("Project: {}", projectPath);
-        log.info("Max Retries: {}", config.getMaxRetries());
         if (promptTemplatePath != null) {
-            log.info("Custom Prompt Template: {}", promptTemplatePath);
+            System.out.println("Custom Prompt Template: " + promptTemplatePath);
         }
 
         if (!claudeGenerator.isClaudeAvailable()) {
-            log.error("Claude CLI is not available. Please install Claude Code and ensure 'claude' command is in PATH.");
+            System.out.println("ERROR: Claude CLI is not available. Please install Claude Code and ensure 'claude' command is in PATH.");
             return GenerationResult.failure(0, "Claude CLI not found. Install Claude Code first.");
         }
 
@@ -51,64 +44,64 @@ public class Orchestrator {
                 .build();
 
         for (int attempt = 1; attempt <= config.getMaxRetries(); attempt++) {
-            log.info("");
-            log.info("=== Attempt {}/{} ===", attempt, config.getMaxRetries());
+            System.out.println();
+            System.out.printf("=== Attempt %d/%d ===%n", attempt, config.getMaxRetries());
 
-            log.info("State 1: Generating tests with Claude...");
+            System.out.println("State 1: Generating tests with Claude...");
             GenerationPhase genPhase = claudeGenerator.generate(context);
-            log.info("Result: {}", genPhase.isSuccess() ? "SUCCESS" : "FAILED");
+            System.out.println("Result: " + (genPhase.isSuccess() ? "SUCCESS" : "FAILED"));
 
             if (genPhase.failed()) {
-                log.warn("Generation failed: {}", genPhase.getFeedback());
+                System.out.println("Generation failed: " + genPhase.getFeedback());
                 context = context.addFeedback(genPhase);
                 continue;
             }
 
-            log.info("State 2: Building project...");
+            System.out.println("State 2: Building project...");
             BuildPhase buildPhase = gradleRunner.build(context);
-            log.info("Result: {}", buildPhase.isSuccess() ? "SUCCESS" : "FAILED");
+            System.out.println("Result: " + (buildPhase.isSuccess() ? "SUCCESS" : "FAILED"));
 
             if (buildPhase.failed()) {
-                log.warn("Build failed with {} errors", buildPhase.getCompilationErrors().size());
+                System.out.printf("Build failed with %d errors%n", buildPhase.getCompilationErrors().size());
                 context = context.addFeedback(buildPhase);
                 continue;
             }
 
-            log.info("State 3: Running tests (without MetaTest)...");
+            System.out.println("State 3: Running tests (without MetaTest)...");
             TestPhase testPhase = gradleRunner.runTests(context);
-            log.info("Result: {}", testPhase.isSuccess() ? "SUCCESS" : "FAILED");
+            System.out.println("Result: " + (testPhase.isSuccess() ? "SUCCESS" : "FAILED"));
 
             if (testPhase.failed()) {
-                log.warn("Tests failed: {} failures", testPhase.getTestFailures().size());
+                System.out.printf("Tests failed: %d failures%n", testPhase.getTestFailures().size());
                 context = context.addFeedback(testPhase);
                 continue;
             }
 
-            log.info("State 4: Running tests with MetaTest fault injection...");
+            System.out.println("State 4: Running tests with MetaTest fault injection...");
             MetaTestPhase metaTestPhase = gradleRunner.runMetaTest(context);
-            log.info("Result: {}", metaTestPhase.isSuccess() ? "SUCCESS" : "FAILED");
-            log.info("Fault Detection Rate: {:.1f}%", metaTestPhase.getFaultDetectionRate() * 100);
+            System.out.println("Result: " + (metaTestPhase.isSuccess() ? "SUCCESS" : "FAILED"));
+            System.out.printf("Fault Detection Rate: %.1f%%%n", metaTestPhase.getFaultDetectionRate() * 100);
 
             if (metaTestPhase.hasEscapedFaults()) {
-                log.warn("MetaTest failed: {} faults escaped", metaTestPhase.getEscapedFaults().size());
+                System.out.printf("MetaTest failed: %d faults escaped%n", metaTestPhase.getEscapedFaults().size());
 
                 if (shouldRetry(context, attempt)) {
                     context = context.addFeedback(metaTestPhase);
                     continue;
                 } else {
-                    log.warn("Same MetaTest failures repeating, stopping retries");
+                    System.out.println("Same MetaTest failures repeating, stopping retries");
                     return GenerationResult.failure(attempt,
                             "MetaTest failures are repeating. Generated tests may be at maximum quality.");
                 }
             }
 
-            log.info("=== SUCCESS ===");
-            log.info("Tests generated and validated in {} attempts", attempt);
+            System.out.println("=== SUCCESS ===");
+            System.out.printf("Tests generated and validated in %d attempts%n", attempt);
             return GenerationResult.success(attempt, genPhase.getGeneratedFiles());
         }
 
-        log.error("=== FAILURE ===");
-        log.error("Failed to generate valid tests after {} attempts", config.getMaxRetries());
+        System.out.println("=== FAILURE ===");
+        System.out.printf("Failed to generate valid tests after %d attempts%n", config.getMaxRetries());
         return GenerationResult.failure(config.getMaxRetries(),
                 "Maximum retries exceeded. Last error: " + context.getLatestFeedback().getFeedback());
     }

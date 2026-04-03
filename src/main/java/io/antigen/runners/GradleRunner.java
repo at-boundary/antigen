@@ -160,44 +160,46 @@ public class GradleRunner {
         }
 
         ObjectMapper mapper = new ObjectMapper();
-        // Parse structure: { "/endpoint": { "field": { "faultType": {caught_by_any_test, details[]} } } }
-        java.util.Map<String, java.util.Map<String, java.util.Map<String, FaultTypeResult>>> rawReport =
+        // New structure: { "/endpoint": { counters..., "contract_faults": {faultType: {field: result}}, "invariant_faults": {name: result} } }
+        java.util.Map<String, EndpointReport> rawReport =
                 mapper.readValue(reportPath.toFile(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
 
         java.util.List<EscapedFault> escapedFaults = new java.util.ArrayList<>();
         int totalFaults = 0;
         int caughtFaults = 0;
 
-        for (java.util.Map.Entry<String, java.util.Map<String, java.util.Map<String, FaultTypeResult>>> endpointEntry : rawReport.entrySet()) {
+        for (java.util.Map.Entry<String, EndpointReport> endpointEntry : rawReport.entrySet()) {
             String endpoint = endpointEntry.getKey();
+            EndpointReport endpointReport = endpointEntry.getValue();
 
-            for (java.util.Map.Entry<String, java.util.Map<String, FaultTypeResult>> fieldEntry : endpointEntry.getValue().entrySet()) {
-                String field = fieldEntry.getKey();
+            totalFaults += endpointReport.getContractFaultCount() + endpointReport.getInvariantFaultCount();
+            caughtFaults += endpointReport.getContractFaultsCaught() + endpointReport.getInvariantFaultsCaught();
 
-                for (java.util.Map.Entry<String, FaultTypeResult> faultTypeEntry : fieldEntry.getValue().entrySet()) {
-                    String faultType = faultTypeEntry.getKey();
-                    FaultTypeResult faultResult = faultTypeEntry.getValue();
-
-                    totalFaults++;
-
-                    if (faultResult.isCaughtByAnyTest()) {
-                        caughtFaults++;
-                    } else {
-                        // Escaped fault - find which tests failed to catch it
-                        java.util.List<String> failedTests = faultResult.getDetails().stream()
-                                .filter(detail -> !detail.isCaught())
-                                .map(FaultTestResult::getTest)
-                                .toList();
-
-                        String testsInfo = failedTests.isEmpty() ? "all tests" : String.join(", ", failedTests);
-
+            // Escaped contract faults: contract_faults -> faultType -> fieldName
+            for (java.util.Map.Entry<String, java.util.Map<String, FaultFieldResult>> faultTypeEntry
+                    : endpointReport.getContractFaults().entrySet()) {
+                String faultType = faultTypeEntry.getKey();
+                for (java.util.Map.Entry<String, FaultFieldResult> fieldEntry
+                        : faultTypeEntry.getValue().entrySet()) {
+                    String fieldName = fieldEntry.getKey();
+                    FaultFieldResult result = fieldEntry.getValue();
+                    if (!result.isCaughtByAnyTest()) {
                         escapedFaults.add(new EscapedFault(
-                                endpoint,
-                                field,
-                                faultType,
-                                testsInfo
-                        ));
+                                endpoint, fieldName, faultType,
+                                String.join(", ", result.getTestedBy())));
                     }
+                }
+            }
+
+            // Escaped invariant faults: invariant_faults -> invariantName
+            for (java.util.Map.Entry<String, FaultFieldResult> invariantEntry
+                    : endpointReport.getInvariantFaults().entrySet()) {
+                String invariantName = invariantEntry.getKey();
+                FaultFieldResult result = invariantEntry.getValue();
+                if (!result.isCaughtByAnyTest()) {
+                    escapedFaults.add(new EscapedFault(
+                            endpoint, invariantName, "invariant",
+                            String.join(", ", result.getTestedBy())));
                 }
             }
         }
@@ -227,30 +229,66 @@ public class GradleRunner {
     }
 
     /**
-     * DTO for parsing fault type results from MetaTest JSON report
-     * Structure: { "caught_by_any_test": true/false, "details": [...] }
+     * DTO for one endpoint entry in the MetaTest report.
+     * Structure: { contractFaultCount, invariantFaultCount, contractFaultsCaught, invariantFaultsCaught,
+     *              contract_faults: { faultType: { fieldName: FaultFieldResult } },
+     *              invariant_faults: { invariantName: FaultFieldResult } }
      */
     @Data
-    public static class FaultTypeResult {
-        @com.fasterxml.jackson.annotation.JsonProperty("caught_by_any_test")
-        private boolean caughtByAnyTest;  // True if at least one test caught this fault
-        private java.util.List<FaultTestResult> details;  // Individual test results
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public static class EndpointReport {
+        @com.fasterxml.jackson.annotation.JsonProperty("contractFaultCount")
+        private int contractFaultCount;
+        @com.fasterxml.jackson.annotation.JsonProperty("invariantFaultCount")
+        private int invariantFaultCount;
+        @com.fasterxml.jackson.annotation.JsonProperty("contractFaultsCaught")
+        private int contractFaultsCaught;
+        @com.fasterxml.jackson.annotation.JsonProperty("invariantFaultsCaught")
+        private int invariantFaultsCaught;
+        @com.fasterxml.jackson.annotation.JsonProperty("contract_faults")
+        private java.util.Map<String, java.util.Map<String, FaultFieldResult>> contractFaults;
+        @com.fasterxml.jackson.annotation.JsonProperty("invariant_faults")
+        private java.util.Map<String, FaultFieldResult> invariantFaults;
 
-        public FaultTypeResult() {}
+        public EndpointReport() {}
 
-        public java.util.List<FaultTestResult> getDetails() {
-            return details != null ? details : java.util.List.of();
+        public java.util.Map<String, java.util.Map<String, FaultFieldResult>> getContractFaults() {
+            return contractFaults != null ? contractFaults : java.util.Map.of();
+        }
+
+        public java.util.Map<String, FaultFieldResult> getInvariantFaults() {
+            return invariantFaults != null ? invariantFaults : java.util.Map.of();
         }
     }
 
     /**
-     * DTO for parsing individual test results from MetaTest JSON report
+     * DTO for a single fault result (contract field or invariant).
+     * Structure: { "caught_by_any_test": true/false, "tested_by": [...], "caught_by": [...] }
+     */
+    @Data
+    public static class FaultFieldResult {
+        @com.fasterxml.jackson.annotation.JsonProperty("caught_by_any_test")
+        private boolean caughtByAnyTest;
+        @com.fasterxml.jackson.annotation.JsonProperty("tested_by")
+        private java.util.List<String> testedBy;
+        @com.fasterxml.jackson.annotation.JsonProperty("caught_by")
+        private java.util.List<FaultTestResult> caughtBy;
+
+        public FaultFieldResult() {}
+
+        public java.util.List<String> getTestedBy() {
+            return testedBy != null ? testedBy : java.util.List.of();
+        }
+    }
+
+    /**
+     * DTO for an individual test result within a fault entry.
      */
     @Data
     public static class FaultTestResult {
-        private String test;      // Test method name
-        private boolean caught;   // Whether the test caught the fault
-        private String error;     // Error message if caught
+        private String test;
+        private boolean caught;
+        private String error;
 
         public FaultTestResult() {}
     }

@@ -9,21 +9,17 @@ import io.antigen.orchestrator.Orchestrator;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.tasks.TaskAction;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 
 public class GenerateAITestsTask extends DefaultTask {
-    private static final Logger logger = LoggerFactory.getLogger(GenerateAITestsTask.class);
 
     @TaskAction
     public void generateTests() {
         try {
             File projectDir = getProject().getProjectDir();
-            logger.info("Running Antigen test generation for project: {}", projectDir);
 
             YamlConfigLoader loader = new YamlConfigLoader();
             YamlConfig yamlConfig = loader.load(projectDir);
@@ -32,10 +28,12 @@ public class GenerateAITestsTask extends DefaultTask {
             Path specPath = resolvePathFromProject(projectPath, yamlConfig.getSpec());
             Path promptTemplatePath = resolvePromptTemplate(projectPath, yamlConfig.getPromptTemplate());
 
-            logger.info("API Specification: {}", specPath);
-            logger.info("Output directory: {}", yamlConfig.getOutputDir());
-            logger.info("Max retries: {}", yamlConfig.getMaxRetries());
-            logger.info("MetaTest validation: {}", yamlConfig.getValidation().isEnabled() ? "enabled" : "disabled");
+            getLogger().lifecycle("=== Antigen Test Generation ===");
+            getLogger().lifecycle("Spec:        {}", specPath);
+            getLogger().lifecycle("Output:      src/test/java/{}", yamlConfig.getOutputDir());
+            getLogger().lifecycle("Max retries: {}", yamlConfig.getMaxRetries());
+            getLogger().lifecycle("MetaTest:    {}", yamlConfig.getValidation().isEnabled() ? "enabled" : "disabled");
+            getLogger().lifecycle("");
 
             AntigenConfig antigenConfig = ConfigConverter.toAntigenConfig(yamlConfig);
 
@@ -48,9 +46,11 @@ public class GenerateAITestsTask extends DefaultTask {
             );
 
             if (result.isSuccess()) {
-                logger.info("SUCCESS: Tests generated in {} attempts", result.getAttempts());
-                logger.info("Generated {} test files", result.getGeneratedFiles().size());
-                result.getGeneratedFiles().forEach(file -> logger.info("  - {}", file));
+                getLogger().lifecycle("");
+                getLogger().lifecycle("=== SUCCESS ===");
+                getLogger().lifecycle("Generated {} test files in {} attempt(s)", result.getGeneratedFiles().size(), result.getAttempts());
+                result.getGeneratedFiles().forEach(file ->
+                    getLogger().lifecycle("  - {}", projectPath.relativize(file)));
             } else {
                 throw new GradleException("Test generation failed after " + result.getAttempts() +
                     " attempts: " + result.getErrorMessage());
